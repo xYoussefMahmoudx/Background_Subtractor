@@ -1,0 +1,8 @@
+﻿  Source.cpp
+C:\youseef\asu university\Spring 2025\HPC\openMP_background_subtractor\HPC_ProjectTemplate\HPC_ProjectTemplate\Source.cpp(95,9): warning C4849: OpenMP 'collapse' clause ignored in 'parallel for' directive
+C:\youseef\asu university\Spring 2025\HPC\openMP_background_subtractor\HPC_ProjectTemplate\HPC_ProjectTemplate\Source.cpp(122,9): warning C4849: OpenMP 'collapse' clause ignored in 'parallel for' directive
+C:\youseef\asu university\Spring 2025\HPC\openMP_background_subtractor\HPC_ProjectTemplate\HPC_ProjectTemplate\Source.cpp(172,68): warning C4244: '+=': conversion from 'double' to 'int', possible loss of data
+  .NETFramework,Version=v4.0.AssemblyAttributes.cpp
+  Generating Code...
+  Source.obj : MSIL module encountered; incremental linking is disabled for MSIL; performing full link
+  HPC_ProjectTemplate.vcxproj -> C:\youseef\asu university\Spring 2025\HPC\openMP_background_subtractor\HPC_ProjectTemplate\Debug\HPC_ProjectTemplate.exe

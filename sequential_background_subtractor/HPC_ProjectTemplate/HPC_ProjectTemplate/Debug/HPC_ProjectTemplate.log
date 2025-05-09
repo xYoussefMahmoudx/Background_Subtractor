@@ -1,0 +1,4 @@
+﻿  Source.cpp
+C:\youseef\asu university\Spring 2025\HPC\sequential_background_subtractor\HPC_ProjectTemplate\HPC_ProjectTemplate\Source.cpp(175,68): warning C4244: '+=': conversion from 'double' to 'int', possible loss of data
+  Source.obj : MSIL module encountered; incremental linking is disabled for MSIL; performing full link
+  HPC_ProjectTemplate.vcxproj -> C:\youseef\asu university\Spring 2025\HPC\sequential_background_subtractor\HPC_ProjectTemplate\Debug\HPC_ProjectTemplate.exe
