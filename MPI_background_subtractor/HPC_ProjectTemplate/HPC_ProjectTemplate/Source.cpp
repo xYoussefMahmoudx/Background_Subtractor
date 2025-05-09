@@ -6,6 +6,7 @@
 #include <msclr\marshal_cppstd.h>
 #include <ctime>
 #include <mpi.h>
+
 #pragma once
 
 #using <mscorlib.dll>
@@ -95,162 +96,221 @@ int main(int argc, char* argv[]) {
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-    int start_s, stop_s, TotalTime = 0;
-    int width = 0, height = 0;
-
+    vector<string> imagePaths;
     vector<ColorImage> colorImages;
-    ColorImage background;
-    ColorImage currentFrame;
+    int width = 0, height = 0;
+    int start_s, stop_s, TotalTime = 0;
 
+    // Rank 0 loads all images
     if (rank == 0) {
-        cout << "MPI Parallel Background Subtractor" << endl;
-        vector<string> imagePaths = getImagePaths();
+        cout << "Parallel Background subtractor using MPI" << endl;
+        imagePaths = getImagePaths();
         for (const auto& path : imagePaths) {
             System::String^ imagePath = marshal_as<System::String^>(path);
-            //cout << "Rank " << rank << " loading image: " << path << endl;
             ColorImage img = inputColorImage(&width, &height, imagePath);
             colorImages.push_back(img);
         }
+
+        cout << "Images loaded by rank 0" << endl;
     }
 
+    // Broadcast image dimensions to all processes
     MPI_Bcast(&width, 1, MPI_INT, 0, MPI_COMM_WORLD);
     MPI_Bcast(&height, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
     int totalPixels = width * height;
-
-    int chunkSize = totalPixels / size;
+    int pixelsPerProcess = totalPixels / size;
     int remainder = totalPixels % size;
-    int* counts = new int[size];
-    int* displs = new int[size];
-    for (int i = 0; i < size; ++i) {
-        counts[i] = chunkSize + (i < remainder ? 1 : 0);
-        displs[i] = (i == 0) ? 0 : displs[i - 1] + counts[i - 1];
+
+
+    vector<int> counts(size, pixelsPerProcess);
+    vector<int> displs(size, 0);
+
+    for (int i = 0; i < remainder; i++) {
+        counts[i]++;
     }
 
-    int* partialRed = new int[totalPixels] {};
-    int* partialGreen = new int[totalPixels] {};
-    int* partialBlue = new int[totalPixels] {};
-
-    if (rank == 0) {
-        for (const auto& img : colorImages) {
-            for (int i = 0; i < totalPixels; ++i) {
-                partialRed[i] += img.Red[i];
-                partialGreen[i] += img.Green[i];
-                partialBlue[i] += img.Blue[i];
-            }
-        }
+    for (int i = 1; i < size; i++) {
+        displs[i] = displs[i - 1] + counts[i - 1];
     }
 
-    int* localRed = new int[totalPixels] {};
-    int* localGreen = new int[totalPixels] {};
-    int* localBlue = new int[totalPixels] {};
+    int myCount = counts[rank];
+    int myDispl = displs[rank];
+
+ 
+    int* localRedSum = new int[myCount]();
+    int* localGreenSum = new int[myCount]();
+    int* localBlueSum = new int[myCount]();
+
+    
+    MPI_Barrier(MPI_COMM_WORLD);
     if (rank == 0) {
         start_s = clock();
     }
 
-    MPI_Reduce(partialRed, localRed, totalPixels, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
-    MPI_Reduce(partialGreen, localGreen, totalPixels, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
-    MPI_Reduce(partialBlue, localBlue, totalPixels, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+    // Scatter image data and calculate local sums
+    for (int frame = 0; frame < NUM_FRAMES; frame++) {
+        int* redChannel = nullptr;
+        int* greenChannel = nullptr;
+        int* blueChannel = nullptr;
 
-    int* bgRed = nullptr;
-    int* bgGreen = nullptr;
-    int* bgBlue = nullptr;
-
-    if (rank == 0) {
-        int numImages = colorImages.size();
-        bgRed = new int[totalPixels];
-        bgGreen = new int[totalPixels];
-        bgBlue = new int[totalPixels];
-
-        for (int i = 0; i < totalPixels; ++i) {
-            bgRed[i] = localRed[i] / numImages;
-            bgGreen[i] = localGreen[i] / numImages;
-            bgBlue[i] = localBlue[i] / numImages;
+        if (rank == 0) {
+            redChannel = colorImages[frame].Red;
+            greenChannel = colorImages[frame].Green;
+            blueChannel = colorImages[frame].Blue;
         }
 
-        background = { bgRed, bgGreen, bgBlue, width, height };
-        currentFrame = colorImages.back();
+        int* localRed = new int[myCount];
+        int* localGreen = new int[myCount];
+        int* localBlue = new int[myCount];
+
+        // Scatter each channel
+        MPI_Scatterv(redChannel, counts.data(), displs.data(), MPI_INT,
+            localRed, myCount, MPI_INT, 0, MPI_COMM_WORLD);
+        MPI_Scatterv(greenChannel, counts.data(), displs.data(), MPI_INT,
+            localGreen, myCount, MPI_INT, 0, MPI_COMM_WORLD);
+        MPI_Scatterv(blueChannel, counts.data(), displs.data(), MPI_INT,
+            localBlue, myCount, MPI_INT, 0, MPI_COMM_WORLD);
+
+        // Accumulate sums
+        for (int i = 0; i < myCount; i++) {
+            localRedSum[i] += localRed[i];
+            localGreenSum[i] += localGreen[i];
+            localBlueSum[i] += localBlue[i];
+        }
+
+        delete[] localRed;
+        delete[] localGreen;
+        delete[] localBlue;
     }
 
+    // Calculate local mean
+    for (int i = 0; i < myCount; i++) {
+        localRedSum[i] /= NUM_FRAMES;
+        localGreenSum[i] /= NUM_FRAMES;
+        localBlueSum[i] /= NUM_FRAMES;
+    }
 
-
-    int* bgR = new int[totalPixels];
-    int* bgG = new int[totalPixels];
-    int* bgB = new int[totalPixels];
-    int* frameR = new int[totalPixels];
-    int* frameG = new int[totalPixels];
-    int* frameB = new int[totalPixels];
+    // Gather background results to rank 0
+    int* backgroundRed = nullptr;
+    int* backgroundGreen = nullptr;
+    int* backgroundBlue = nullptr;
 
     if (rank == 0) {
-        memcpy(bgR, bgRed, totalPixels * sizeof(int));
-        memcpy(bgG, bgGreen, totalPixels * sizeof(int));
-        memcpy(bgB, bgBlue, totalPixels * sizeof(int));
-        memcpy(frameR, currentFrame.Red, totalPixels * sizeof(int));
-        memcpy(frameG, currentFrame.Green, totalPixels * sizeof(int));
-        memcpy(frameB, currentFrame.Blue, totalPixels * sizeof(int));
+        backgroundRed = new int[totalPixels];
+        backgroundGreen = new int[totalPixels];
+        backgroundBlue = new int[totalPixels];
     }
 
-    MPI_Bcast(bgR, totalPixels, MPI_INT, 0, MPI_COMM_WORLD);
-    MPI_Bcast(bgG, totalPixels, MPI_INT, 0, MPI_COMM_WORLD);
-    MPI_Bcast(bgB, totalPixels, MPI_INT, 0, MPI_COMM_WORLD);
-    MPI_Bcast(frameR, totalPixels, MPI_INT, 0, MPI_COMM_WORLD);
-    MPI_Bcast(frameG, totalPixels, MPI_INT, 0, MPI_COMM_WORLD);
-    MPI_Bcast(frameB, totalPixels, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Gatherv(localRedSum, myCount, MPI_INT,
+        backgroundRed, counts.data(), displs.data(), MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Gatherv(localGreenSum, myCount, MPI_INT,
+        backgroundGreen, counts.data(), displs.data(), MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Gatherv(localBlueSum, myCount, MPI_INT,
+        backgroundBlue, counts.data(), displs.data(), MPI_INT, 0, MPI_COMM_WORLD);
 
-    int localSize = counts[rank];
-    int localStart = displs[rank];
-    int* localMask = new int[localSize];
 
-    for (int i = 0; i < localSize; ++i) {
-        int idx = localStart + i;
-        int bgGray = (bgR[idx] + bgG[idx] + bgB[idx]) / 3;
-        int frameGray = (frameR[idx] + frameG[idx] + frameB[idx]) / 3;
+    int* lastFrameRed = nullptr;
+    int* lastFrameGreen = nullptr;
+    int* lastFrameBlue = nullptr;
+
+    if (rank == 0) {
+        lastFrameRed = colorImages.back().Red;
+        lastFrameGreen = colorImages.back().Green;
+        lastFrameBlue = colorImages.back().Blue;
+    }
+
+
+    int* localBgRed = new int[myCount];
+    int* localBgGreen = new int[myCount];
+    int* localBgBlue = new int[myCount];
+    int* localFrameRed = new int[myCount];
+    int* localFrameGreen = new int[myCount];
+    int* localFrameBlue = new int[myCount];
+
+    MPI_Scatterv(backgroundRed, counts.data(), displs.data(), MPI_INT,
+        localBgRed, myCount, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Scatterv(backgroundGreen, counts.data(), displs.data(), MPI_INT,
+        localBgGreen, myCount, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Scatterv(backgroundBlue, counts.data(), displs.data(), MPI_INT,
+        localBgBlue, myCount, MPI_INT, 0, MPI_COMM_WORLD);
+
+    MPI_Scatterv(lastFrameRed, counts.data(), displs.data(), MPI_INT,
+        localFrameRed, myCount, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Scatterv(lastFrameGreen, counts.data(), displs.data(), MPI_INT,
+        localFrameGreen, myCount, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Scatterv(lastFrameBlue, counts.data(), displs.data(), MPI_INT,
+        localFrameBlue, myCount, MPI_INT, 0, MPI_COMM_WORLD);
+
+
+    int* localForeground = new int[myCount];
+    for (int i = 0; i < myCount; i++) {
+        int bgGray = (localBgRed[i] + localBgGreen[i] + localBgBlue[i]) / 3;
+        int frameGray = (localFrameRed[i] + localFrameGreen[i] + localFrameBlue[i]) / 3;
         int diff = abs(bgGray - frameGray);
-        localMask[i] = (diff > THRESHOLD) ? 255 : 0;
+        localForeground[i] = (diff > THRESHOLD) ? 255 : 0;
     }
 
-    int* fullMask = nullptr;
-    if (rank == 0) fullMask = new int[totalPixels];
 
-    MPI_Gatherv(localMask, localSize, MPI_INT, fullMask, counts, displs, MPI_INT, 0, MPI_COMM_WORLD);
+    int* foregroundMask = nullptr;
+    if (rank == 0) {
+        foregroundMask = new int[totalPixels];
+    }
 
+    MPI_Gatherv(localForeground, myCount, MPI_INT,
+        foregroundMask, counts.data(), displs.data(), MPI_INT, 0, MPI_COMM_WORLD);
+
+ 
+    MPI_Barrier(MPI_COMM_WORLD);
     if (rank == 0) {
         stop_s = clock();
-        createColorImage(background, "color_background.png");
-        createGrayImage(fullMask, width, height, "foreground_mask.png");
         TotalTime = (stop_s - start_s) / double(CLOCKS_PER_SEC) * 1000;
+
+        // Create background image structure
+        ColorImage colorBackground;
+        colorBackground.Width = width;
+        colorBackground.Height = height;
+        colorBackground.Red = backgroundRed;
+        colorBackground.Green = backgroundGreen;
+        colorBackground.Blue = backgroundBlue;
+
+        // Save results
+        createColorImage(colorBackground, "color_background_parallel.png");
+        createGrayImage(foregroundMask, width, height, "foreground_mask_parallel.png");
+
+        cout << "Processing time: " << TotalTime << " ms" << endl;
+        cout << "Used parameters:" << endl;
+        cout << "  Number of frames: " << NUM_FRAMES << endl;
+        cout << "  Threshold value: " << THRESHOLD << endl;
+        cout << "  Number of MPI processes: " << size << endl;
+
+        // Clean up
+        delete[] backgroundRed;
+        delete[] backgroundGreen;
+        delete[] backgroundBlue;
+        delete[] foregroundMask;
 
         for (auto& img : colorImages) {
             delete[] img.Red;
             delete[] img.Green;
             delete[] img.Blue;
         }
-        delete[] fullMask;
-        delete[] bgRed;
-        delete[] bgGreen;
-        delete[] bgBlue;
-
-        cout << "Processing time: " << TotalTime << " ms" << endl;
-        cout << "Used parameters:" << endl;
-        cout << "  Number of frames: " << NUM_FRAMES << endl;
-        cout << "  Threshold value: " << THRESHOLD << endl;
     }
 
-    delete[] localRed;
-    delete[] localGreen;
-    delete[] localBlue;
-    delete[] partialRed;
-    delete[] partialGreen;
-    delete[] partialBlue;
-    delete[] bgR;
-    delete[] bgG;
-    delete[] bgB;
-    delete[] frameR;
-    delete[] frameG;
-    delete[] frameB;
-    delete[] localMask;
-    delete[] counts;
-    delete[] displs;
+    // Clean up local memory
+    delete[] localRedSum;
+    delete[] localGreenSum;
+    delete[] localBlueSum;
+    delete[] localBgRed;
+    delete[] localBgGreen;
+    delete[] localBgBlue;
+    delete[] localFrameRed;
+    delete[] localFrameGreen;
+    delete[] localFrameBlue;
+    delete[] localForeground;
 
     MPI_Finalize();
+
+ 
     return 0;
 }

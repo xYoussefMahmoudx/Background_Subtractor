@@ -2,3 +2,4 @@ D:\Work -FCIS\2020_2021\HPC2020\HPC_ProjectTemplate\HPC_ProjectTemplate\Debug\HP
 D:\Work -FCIS\2020_2021\AI_Parallel_2020_2021\Project\HPC_ProjectTemplate\HPC_ProjectTemplate\Debug\HPC_ProjectTemplate.vcxprojAssemblyReference.cache
 C:\youseef\asu university\Spring 2025\HPC\HPC_ProjectTemplate\HPC_ProjectTemplate\HPC_ProjectTemplate\Debug\HPC_ProjectTemplate.vcxproj.AssemblyReference.cache
 C:\youseef\asu university\Spring 2025\HPC\sequential_background_subtractor\HPC_ProjectTemplate\HPC_ProjectTemplate\Debug\HPC_ProjectTemplate.vcxproj.AssemblyReference.cache
+C:\youseef\asu university\Spring 2025\HPC\Background_Subtractor\sequential_background_subtractor\HPC_ProjectTemplate\HPC_ProjectTemplate\Debug\HPC_ProjectTemplate.vcxproj.AssemblyReference.cache

@@ -15,7 +15,7 @@ using namespace std;
 using namespace msclr::interop;
 
 
-const int NUM_FRAMES = 20;     
+const int NUM_FRAMES = 100;     
 const int THRESHOLD = 30;      
 
 struct ColorImage {

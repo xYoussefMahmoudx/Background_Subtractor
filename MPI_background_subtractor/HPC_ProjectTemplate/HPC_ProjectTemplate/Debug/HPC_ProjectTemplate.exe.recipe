@@ -2,7 +2,7 @@
 <Project>
   <ProjectOutputs>
     <ProjectOutput>
-      <FullPath>C:\youseef\asu university\Spring 2025\HPC\MPI_background_subtractor\HPC_ProjectTemplate\Debug\HPC_ProjectTemplate.exe</FullPath>
+      <FullPath>C:\youseef\asu university\Spring 2025\HPC\Background_Subtractor\MPI_background_subtractor\HPC_ProjectTemplate\Debug\HPC_ProjectTemplate.exe</FullPath>
     </ProjectOutput>
   </ProjectOutputs>
   <ContentFiles />
